@@ -35,9 +35,9 @@ stock UpdatePlayerRouteCheckpoint(playerid)
 
 	if (jobOnShift[playerid]
 		&& PI[playerid][jJob] >= JOB_TAXI
-		&& PI[playerid][jJob] <= JOB_SANITATION
+		&& PI[playerid][jJob] <= JOB_COUNT
 		&& jobRoute[playerid] >= 0
-		&& jobRoute[playerid] < 4)
+		&& jobRoute[playerid] < JOB_ROUTE_POINTS)
 	{
 		new routeIndex = PI[playerid][jJob] - 1;
 		SetPlayerCheckpoint(playerid,

@@ -1,3 +1,5 @@
+#include <YSI_Coding\y_hooks>
+
 #define INVENTORY_SLOTS 10
 #define INVENTORY_STACK_LIMIT 20
 
@@ -5,8 +7,15 @@
 #define ITEM_FOOD 2
 #define ITEM_MEDKIT 3
 #define ITEM_REPAIR_KIT 4
+#define ITEM_ARMOUR_VEST 5
+#define ITEM_BANDAGE 6
+#define ITEM_ENERGY_DRINK 7
+#define ITEM_CIGARETTE 8
 
-#define STORE_COUNT 8
+#define STORE_COUNT 12
+
+new smokingAnimLibrary[] = "SMOKING";
+new smokingAnimName[] = "M_smk_in";
 
 new StoreName[STORE_COUNT][32] =
 {
@@ -17,19 +26,26 @@ new StoreName[STORE_COUNT][32] =
 	"24/7 Market",
 	"24/7 Temple",
 	"24/7 Downtown",
-	"24/7 Jefferson"
+	"24/7 Jefferson",
+	"24/7 Ocean Docks",
+	"24/7 Santa Maria",
+	"24/7 Dillimore",
+	"24/7 Palomino Creek"
 };
 new Float:StoreX[STORE_COUNT] =
 {
-	1721.0, 1928.0, 2448.0, 2424.0, 1111.0, 1039.0, 1315.0, 2196.0
+	1721.0, 1928.0, 2448.0, 2424.0, 1111.0, 1039.0, 1315.0, 2196.0,
+	2750.0, 496.0, 663.0, 2330.0
 };
 new Float:StoreY[STORE_COUNT] =
 {
-	-1877.5, -1776.0, -2038.0, -1741.0, -923.0, -1334.0, -897.0, -1165.0
+	-1877.5, -1776.0, -2038.0, -1741.0, -923.0, -1334.0, -897.0, -1165.0,
+	-2400.0, -1750.0, -573.0, 88.0
 };
 new Float:StoreZ[STORE_COUNT] =
 {
-	13.5, 13.5, 13.5, 13.5, 43.4, 13.7, 39.5, 25.7
+	13.5, 13.5, 13.5, 13.5, 43.4, 13.7, 39.5, 25.7,
+	13.5, 14.8, 16.3, 23.0
 };
 new storePickups[STORE_COUNT];
 
@@ -69,8 +85,8 @@ stock bool:IsPlayerNearStore(playerid)
 stock Show24StoreMenu(playerid)
 {
 	return Dialog_Show(playerid, "OnDialog24Store", DIALOG_STYLE_LIST,
-		"Tiendas 24/7",
-		"Agua - $50\nComida - $75\nBotiquin - $250\nKit mecanico - $500",
+		"Tiendas 24/7 | articulos",
+		"Agua - $50\nComida - $75\nBotiquin - $250\nKit mecanico - $500\nChaleco - $850\nVenda - $120\nBebida energetica - $90\nCigarrillo - $60",
 		"Comprar", "Cerrar");
 }
 
@@ -82,6 +98,10 @@ stock GetInventoryItemName(itemid, name[], size)
 		case ITEM_FOOD: format(name, size, "Comida");
 		case ITEM_MEDKIT: format(name, size, "Botiquin");
 		case ITEM_REPAIR_KIT: format(name, size, "Kit mecanico");
+		case ITEM_ARMOUR_VEST: format(name, size, "Chaleco antibalas");
+		case ITEM_BANDAGE: format(name, size, "Venda");
+		case ITEM_ENERGY_DRINK: format(name, size, "Bebida energetica");
+		case ITEM_CIGARETTE: format(name, size, "Cigarrillo");
 		default: format(name, size, "Desconocido");
 	}
 	return 1;
@@ -139,7 +159,7 @@ public OnInventoryLoaded(playerid, session)
 		cache_get_value_name_int(row, "slot", slot);
 		cache_get_value_name_int(row, "item_id", itemid);
 		cache_get_value_name_int(row, "amount", amount);
-		if (slot < 0 || slot >= INVENTORY_SLOTS || itemid < ITEM_WATER || itemid > ITEM_REPAIR_KIT) continue;
+		if (slot < 0 || slot >= INVENTORY_SLOTS || itemid < ITEM_WATER || itemid > ITEM_CIGARETTE) continue;
 		if (amount < 1 || amount > INVENTORY_STACK_LIMIT) continue;
 		inventoryItems[playerid][slot] = itemid;
 		inventoryAmounts[playerid][slot] = amount;
@@ -327,7 +347,7 @@ CMD:comprar(playerid, params[])
 	new itemName[16], amount;
 	if (sscanf(params, "s[16]i", itemName, amount))
 	{
-		return SendClientMessage(playerid, COLOR_USAGE, "Uso: /comprar <agua|comida|botiquin|kit> <cantidad 1-20>");
+		return SendClientMessage(playerid, COLOR_USAGE, "Uso: /comprar <agua|comida|botiquin|kit|chaleco|venda|energetica|cigarro> <cantidad 1-20>");
 	}
 	if (amount < 1 || amount > INVENTORY_STACK_LIMIT)
 	{
@@ -339,7 +359,11 @@ CMD:comprar(playerid, params[])
 	else if (!strcmp(itemName, "comida", true)) { itemid = ITEM_FOOD; price = 75; }
 	else if (!strcmp(itemName, "botiquin", true)) { itemid = ITEM_MEDKIT; price = 250; }
 	else if (!strcmp(itemName, "kit", true)) { itemid = ITEM_REPAIR_KIT; price = 500; }
-	else return SendClientMessage(playerid, COLOR_USAGE, "Articulos: agua, comida, botiquin, kit.");
+	else if (!strcmp(itemName, "chaleco", true)) { itemid = ITEM_ARMOUR_VEST; price = 850; }
+	else if (!strcmp(itemName, "venda", true)) { itemid = ITEM_BANDAGE; price = 120; }
+	else if (!strcmp(itemName, "energetica", true)) { itemid = ITEM_ENERGY_DRINK; price = 90; }
+	else if (!strcmp(itemName, "cigarro", true)) { itemid = ITEM_CIGARETTE; price = 60; }
+	else return SendClientMessage(playerid, COLOR_USAGE, "Articulos: agua, comida, botiquin, kit, chaleco, venda, energetica, cigarro.");
 
 	return PurchaseStoreItem(playerid, itemid, amount, price);
 }
@@ -385,6 +409,10 @@ Dialog:OnDialog24Store(playerid, response, listitem, inputtext[])
 		case 1: { itemid = ITEM_FOOD; price = 75; }
 		case 2: { itemid = ITEM_MEDKIT; price = 250; }
 		case 3: { itemid = ITEM_REPAIR_KIT; price = 500; }
+		case 4: { itemid = ITEM_ARMOUR_VEST; price = 850; }
+		case 5: { itemid = ITEM_BANDAGE; price = 120; }
+		case 6: { itemid = ITEM_ENERGY_DRINK; price = 90; }
+		case 7: { itemid = ITEM_CIGARETTE; price = 60; }
 		default: return 1;
 	}
 	return PurchaseStoreItem(playerid, itemid, 1, price);
@@ -431,6 +459,37 @@ CMD:usar(playerid, params[])
 			}
 			if (!IsPlayerInAnyVehicle(playerid)) return SendClientMessage(playerid, COLOR_ERROR, "Debes estar dentro del vehiculo que quieres reparar.");
 			RepairVehicle(GetPlayerVehicleID(playerid));
+		}
+		case ITEM_ARMOUR_VEST:
+		{
+			new Float:armour;
+			GetPlayerArmour(playerid, armour);
+			if (armour >= 100.0) return SendClientMessage(playerid, COLOR_ERROR, "Ya tienes la armadura al maximo.");
+			armour += 50.0;
+			if (armour > 100.0) armour = 100.0;
+			SetPlayerArmour(playerid, armour);
+			PI[playerid][jArmour] = armour;
+		}
+		case ITEM_BANDAGE:
+		{
+			new Float:health;
+			GetPlayerHealth(playerid, health);
+			if (health >= 100.0) return SendClientMessage(playerid, COLOR_ERROR, "No necesitas una venda ahora.");
+			health += 15.0;
+			if (health > 100.0) health = 100.0;
+			SetPlayerHealth(playerid, health);
+			PI[playerid][jHealth] = health;
+		}
+		case ITEM_ENERGY_DRINK:
+		{
+			PI[playerid][jThirst] += 20;
+			PI[playerid][jHunger] += 5;
+			if (PI[playerid][jThirst] > 100) PI[playerid][jThirst] = 100;
+			if (PI[playerid][jHunger] > 100) PI[playerid][jHunger] = 100;
+		}
+		case ITEM_CIGARETTE:
+		{
+			ApplyAnimation(playerid, smokingAnimLibrary, smokingAnimName, 4.1, 0, 0, 0, 0, 0);
 		}
 		default: return SendClientMessage(playerid, COLOR_ERROR, "Ese objeto no se puede usar.");
 	}

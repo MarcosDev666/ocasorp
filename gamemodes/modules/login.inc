@@ -238,29 +238,54 @@ Dialog_ShowAccents(playerid)
 }
 
 
-#define CONST_HOST "db-core.bitercloud.lat"
-#define CONST_USER "u90_ewJiWXDOJA"
-#define CONST_PASS "Vmm9bn7!Hxe.CeXsz2!TwM^e"
-#define CONST_DB "s90_orpdb"
-
 new playerSession[MAX_PLAYERS];
+new loginAttempts[MAX_PLAYERS];
+new ACCOUNT_SALT_PEPPER[] = "OcasoRP-account-salt-v1";
+#define LOGIN_MAX_ATTEMPTS 5
+new pendingRegistrationPassword[MAX_PLAYERS][PASS_LEN_MAX + 1];
 
 ConnectDatabase()
 {
     print("[MySQL] Conectando a la base de datos...");
+    dbz = mysql_connect_file("mysql.ini");
+    if (mysql_errno(dbz) != 0)
+    {
+        new error[128];
+        mysql_error(error, sizeof error, dbz);
+        printf("[MySQL] No se pudo conectar. Revisa mysql.ini: %s", error);
+        return 0;
+    }
+    print("[MySQL] Base de datos conectada.");
+    return 1;
+}
 
-	dbz = mysql_connect(CONST_HOST, CONST_USER, CONST_PASS, CONST_DB);
+stock GenerateAccountSalt(playerid, salt[], size)
+{
+    new name[MAX_PLAYER_NAME], ip[22], seed[128];
+    GetPlayerName(playerid, name, sizeof name);
+    GetPlayerIp(playerid, ip, sizeof ip);
+    format(seed, sizeof seed, "%d|%d|%d|%s|%s", gettime(), playerid,
+        random(2147483647), name, ip);
+    SHA256_PassHash(seed, ACCOUNT_SALT_PEPPER, salt, size);
+    return 1;
+}
 
-	if (mysql_errno(dbz) != 0)
-	{
-		print("[MySQL]*Error al conectar la base de datos.");
-	}
-	else
-	{
-  		print("[MySQL]*BASE DE DATOS CONECTADA EXITOSAMENTE");
-	}
-	return 1;
+stock ShowRegisterDialog(playerid)
+{
+    return Dialog_Show(playerid, "OnDialogRegister", DIALOG_STYLE_PASSWORD,
+        ""MAIN_COLOR"OcasoRP | Crear cuenta",
+        "Bienvenido a Ocaso Roleplay.\n\nCrea una contrasena de 8 a 64 caracteres.\nSe almacenara como hash, nunca como texto plano.",
+        "Continuar", "Salir");
+}
 
+stock ShowLoginDialog(playerid)
+{
+    new body[192];
+    format(body, sizeof body,
+        "Bienvenido de nuevo, %s.\n\nIntroduce tu contrasena para entrar.\nIntentos restantes: %d",
+        PlayerName(playerid), LOGIN_MAX_ATTEMPTS - loginAttempts[playerid]);
+    return Dialog_Show(playerid, "OnDialogLogin", DIALOG_STYLE_PASSWORD,
+        ""MAIN_COLOR"OcasoRP | Iniciar sesion", body, "Entrar", "Salir");
 }
 
 hook OnGameModeInit()
@@ -269,146 +294,293 @@ hook OnGameModeInit()
 	return 1;
 }
 
+hook OnPlayerDisconnect(playerid, reason)
+{
+    #pragma unused reason
+    pendingRegistrationPassword[playerid][0] = '\0';
+    loginAttempts[playerid] = 0;
+    return 1;
+}
+
 hook OnPlayerConnect(playerid)
 {
-	playerSession[playerid]++;
-	InitializePropertyPlayer(playerid);
-	InitializeRentalPlayer(playerid);
-	InitializeGameplayPlayer(playerid);
-	PI[playerid][jID] = 0;
-	PI[playerid][jState] = ROLEPLAY_STATE_INLOGIN;
-	PI[playerid][jAdmin] = 0;
+    playerSession[playerid]++;
+    cooldown[playerid] = 0;
+    loginAttempts[playerid] = 0;
+    pendingRegistrationPassword[playerid][0] = '\0';
+    InitializePropertyPlayer(playerid);
+    InitializeRentalPlayer(playerid);
+    InitializeGameplayPlayer(playerid);
+    PI[playerid][jID] = 0;
+    PI[playerid][jState] = ROLEPLAY_STATE_INLOGIN;
+    PI[playerid][jAdmin] = 0;
+    PI[playerid][jPhone] = 0;
 
-	TogglePlayerSpectating(playerid, true);
-	ShowTextdraws(playerid);
+    TogglePlayerSpectating(playerid, true);
+    ShowTextdraws(playerid);
+    ClearPlayerChat(playerid);
+    SetPlayerCameraPos(playerid, 1948.9082, -1504.6945, 98.9190);
+    SetPlayerCameraLookAt(playerid, 1949.5, -1504.0, 98.5);
 
-	ClearPlayerChat(playerid);
-	SetPlayerCameraPos(playerid, 1948.9082, -1504.6945, 98.9190);
-	SetPlayerCameraLookAt(playerid, 1949.5, -1504.0, 98.5);
+    new session = playerSession[playerid];
+    inline CheckAccount()
+    {
+        if (!IsPlayerConnected(playerid) || playerSession[playerid] != session) return 1;
+        if (mysql_errno(dbz) != 0)
+        {
+            SendClientMessage(playerid, COLOR_ERROR, "No se pudo consultar tu cuenta. Intenta mas tarde.");
+            Kick(playerid);
+            return 1;
+        }
 
-	new session = playerSession[playerid];
-	inline CheckAccount()
-	{
-		if (!IsPlayerConnected(playerid) || playerSession[playerid] != session) return 1;
+        new rows;
+        cache_get_row_count(rows);
+        if (rows == 0)
+        {
+            PI[playerid][jState] = ROLEPLAY_STATE_INREGISTER;
+            ShowRegisterDialog(playerid);
+        }
+        else
+        {
+            // No se usa la IP para entrar automaticamente: siempre se valida la contrasena.
+            PI[playerid][jState] = ROLEPLAY_STATE_INLOGIN;
+            ShowLoginDialog(playerid);
+        }
+        return 1;
+    }
 
-		new DB_RESULT_ROWS;
-		cache_get_row_count(DB_RESULT_ROWS);
-
-		if (DB_RESULT_ROWS == 0)
-		{
-			Dialog_Show(playerid, "OnDialogRegister", DIALOG_STYLE_PASSWORD, ""MAIN_COLOR"OcasoZone{f5f5f5} > Registro de cuenta", "{f5f5f5}Bienvenido a "MAIN_COLOR"OcasoZone{f5f5f5}!\n\nTu cuenta no se encuentra "MAIN_COLOR"registrada.{f5f5f5}\nIngresa una "MAIN_COLOR"contrase�a (6-18 CARACTERES)", "�Siguiente", "xSalir");
-			PI[playerid][jState] = ROLEPLAY_STATE_INLOGIN;
-		}
-		else
-		{
-			cache_get_value_name(0, "jIP_reg", PI[playerid][jIP_reg], 22);
-			GetPlayerIp(playerid, PT[playerid][pt_IP_CONN], 22);
-
-			if (!strcmp(PI[playerid][jIP_reg], PT[playerid][pt_IP_CONN], false))
-			{
-				JoinPlayer(playerid);
-			}
-			else
-			{
-				Dialog_Show(playerid, "OnDialogLogin", DIALOG_STYLE_PASSWORD, ""MAIN_COLOR"OcasoZone{f5f5f5} > Ingresa al servidor", "{f5f5f5}Bienvenido de nuevo a "MAIN_COLOR"OcasoZone{f5f5f5}!\n\nTu cuenta fue "MAIN_COLOR"encontrada {f5f5f5}\nIngresa tu "MAIN_COLOR"contrase�a para ingresar al servidor", "�Siguiente", "xSalir");
-			}
-		}
-	}
-	mysql_format(dbz, QUERY_BUFFER, sizeof QUERY_BUFFER, "SELECT * FROM players WHERE jName='%e'", PlayerName(playerid));
-	MySQL_TQueryInline(dbz, using inline CheckAccount, QUERY_BUFFER);
-	
-	return 1;
+    mysql_format(dbz, QUERY_BUFFER, sizeof QUERY_BUFFER,
+        "SELECT id FROM players WHERE jName='%e' LIMIT 1", PlayerName(playerid));
+    MySQL_TQueryInline(dbz, using inline CheckAccount, QUERY_BUFFER);
+    return 1;
 }
 
 Dialog:OnDialogRegister(playerid, response, listitem, inputtext[])
 {
-	if (!response) return Kick(playerid);
+    #pragma unused listitem
+    if (!response) return Kick(playerid);
+    if (PI[playerid][jState] != ROLEPLAY_STATE_INREGISTER) return 1;
 
-	new passlength = strlen(inputtext);
-	if (passlength < PASS_LEN_MIN || passlength > PASS_LEN_MAX) return Dialog_Show(playerid, "OnDialogRegister", DIALOG_STYLE_PASSWORD, ""MAIN_COLOR"OcasoZone{f5f5f5} > Registro de cuenta", "{f5f5f5}Bienvenido a "MAIN_COLOR"OcasoZone{f5f5f5}!\n\nTu cuenta no se encuentra "MAIN_COLOR"registrada.{f5f5f5}\nIngresa una "MAIN_COLOR"contrase�a (6-18 CARACTERES)", "�Siguiente", "xSalir");
-	if (IsOnlySpaces(inputtext)) return Dialog_Show(playerid, "OnDialogRegister", DIALOG_STYLE_PASSWORD, ""MAIN_COLOR"OcasoZone{f5f5f5} > Registro de cuenta", "{f5f5f5}Bienvenido a "MAIN_COLOR"OcasoZone{f5f5f5}!\n\nLa cuenta "MAIN_COLOR"%s{f5f5f5} no se encuentra "MAIN_COLOR"registrada.{f5f5f5}\nIngresa una "MAIN_COLOR"contrase�a (6-18 CARACTERES)", "�Siguiente", "xSalir", PlayerName(playerid));
-	
-	format(PI[playerid][jPass], PASS_LEN_MAX, "%s", inputtext);
-
-	Dialog_Show(playerid, "OnDialogGender", DIALOG_STYLE_MSGBOX, ""MAIN_COLOR"OcasoZone{f5f5f5} > ?Cual es tu genero?", "{f5f5f5}Selecciona tu "MAIN_COLOR"Genero {f5f5f5}para continuar con el registro!", "Masculino", "Femenino");
-	return 1;
+    new passlength = strlen(inputtext);
+    if (passlength < PASS_LEN_MIN || passlength > PASS_LEN_MAX || IsOnlySpaces(inputtext))
+    {
+        SendClientMessage(playerid, COLOR_ERROR, "La contrasena debe tener entre 8 y 64 caracteres y no puede estar vacia.");
+        return ShowRegisterDialog(playerid);
+    }
+    format(pendingRegistrationPassword[playerid], PASS_LEN_MAX + 1, "%s", inputtext);
+    Dialog_Show(playerid, "OnDialogGender", DIALOG_STYLE_MSGBOX,
+        ""MAIN_COLOR"OcasoRP | Crear personaje",
+        "Selecciona el genero de tu personaje.", "Masculino", "Femenino");
+    return 1;
 }
+
 Dialog:OnDialogGender(playerid, response, listitem, inputtext[])
 {
-	if (response) //masculino
-	{
-		PI[playerid][jGender] = 1;
-		PI[playerid][jSkin] = 250;
-	}
-	else //femenino
-	{
-		PI[playerid][jGender] = 2;
-		PI[playerid][jSkin] = 11;
-	}
-	Dialog_Show(playerid, "OnDialogAge", DIALOG_STYLE_INPUT, ""MAIN_COLOR"OcasoZone{f5f5f5} > Ingresa tu edad", "{f5f5f5}Ingresa tu edad"MAIN_COLOR", Ya falta poco para que puedas jugar!", "�Siguiente", "xSalir");
-	return 1;
+    #pragma unused listitem, inputtext
+    if (PI[playerid][jState] != ROLEPLAY_STATE_INREGISTER) return 1;
+    if (response)
+    {
+        PI[playerid][jGender] = 1;
+        PI[playerid][jSkin] = 250;
+    }
+    else
+    {
+        PI[playerid][jGender] = 2;
+        PI[playerid][jSkin] = 11;
+    }
+    Dialog_Show(playerid, "OnDialogAge", DIALOG_STYLE_INPUT,
+        ""MAIN_COLOR"OcasoRP | Edad del personaje",
+        "Ingresa una edad entre 18 y 60 anos.", "Continuar", "Volver");
+    return 1;
 }
+
 Dialog:OnDialogAge(playerid, response, listitem, inputtext[])
 {
-	new agei = strval(inputtext);
-	if (!response) return Dialog_Show(playerid, "OnDialogGender", DIALOG_STYLE_MSGBOX, ""MAIN_COLOR"OcasoZone{f5f5f5} > ?Cual es tu genero?", "{f5f5f5}Selecciona tu "MAIN_COLOR"Genero {f5f5f5}para continuar con el registro!", "Masculino", "Femenino");
-	if (agei < 18 || agei > 60) return Dialog_Show(playerid, "OnDialogAge", DIALOG_STYLE_INPUT, ""MAIN_COLOR"OcasoZone{f5f5f5} > Ingresa tu edad", "{f5f5f5}Ingresa tu edad"MAIN_COLOR", Ya falta poco para que puedas jugar!", "�Siguiente", "xSalir");
-	
-	PI[playerid][jAge] = agei;
-	Dialog_ShowAccents(playerid);
-	return 1;
+    #pragma unused listitem
+    if (!response)
+    {
+        return Dialog_Show(playerid, "OnDialogGender", DIALOG_STYLE_MSGBOX,
+            ""MAIN_COLOR"OcasoRP | Crear personaje",
+            "Selecciona el genero de tu personaje.", "Masculino", "Femenino");
+    }
+    if (PI[playerid][jState] != ROLEPLAY_STATE_INREGISTER || !IsNumericString(inputtext))
+    {
+        SendClientMessage(playerid, COLOR_ERROR, "Ingresa una edad numerica valida.");
+        return Dialog_Show(playerid, "OnDialogAge", DIALOG_STYLE_INPUT,
+            ""MAIN_COLOR"OcasoRP | Edad del personaje",
+            "Ingresa una edad entre 18 y 60 anos.", "Continuar", "Volver");
+    }
+
+    new age = strval(inputtext);
+    if (age < 18 || age > 60)
+    {
+        SendClientMessage(playerid, COLOR_ERROR, "La edad permitida es de 18 a 60 anos.");
+        return Dialog_Show(playerid, "OnDialogAge", DIALOG_STYLE_INPUT,
+            ""MAIN_COLOR"OcasoRP | Edad del personaje",
+            "Ingresa una edad entre 18 y 60 anos.", "Continuar", "Volver");
+    }
+    PI[playerid][jAge] = age;
+    Dialog_ShowAccents(playerid);
+    return 1;
 }
+
 Dialog:OnDialogAccents(playerid, response, listitem, inputtext[])
 {
-	if (!response) return Dialog_Show(playerid, "OnDialogAge", DIALOG_STYLE_INPUT, ""MAIN_COLOR"OcasoZone{f5f5f5} > Ingresa tu edad", "{f5f5f5}Ingresa tu edad"MAIN_COLOR", Ya falta poco para que puedas jugar!", "�Siguiente", "xSalir");
+    #pragma unused inputtext
+    if (!response) return Dialog_Show(playerid, "OnDialogAge", DIALOG_STYLE_INPUT,
+        ""MAIN_COLOR"OcasoRP | Edad del personaje",
+        "Ingresa una edad entre 18 y 60 anos.", "Continuar", "Volver");
+    if (PI[playerid][jState] != ROLEPLAY_STATE_INREGISTER
+        || listitem < 0 || listitem >= sizeof Accents)
+    {
+        return 1;
+    }
 
-	PI[playerid][jAccent] = listitem;
-
-	Dialog_Show(playerid, "OnDialogConfirmDate", 
-	DIALOG_STYLE_MSGBOX, 
-	""MAIN_COLOR"OcasoZone{f5f5f5} > ?Esta todo correcto?", 
-	"{f5f5f5}Si crees que los datos de tu cuenta son correctos, pulsa continuar\
-	\nDe lo contrario, pulsa salir\n\
-	\nNombre: %s\nGenero: %s\n\
-	Edad: %d\nAcento: %s", 
-	"�Continuar", "xSalir", 
-	PlayerName(playerid), ConvertGenderStr(playerid), PI[playerid][jAge], Accents[PI[playerid][jAccent]]);
-	return 1;
+    PI[playerid][jAccent] = listitem;
+    Dialog_Show(playerid, "OnDialogConfirmDate", DIALOG_STYLE_MSGBOX,
+        ""MAIN_COLOR"OcasoRP | Confirmar personaje",
+        "Nombre: %s\nGenero: %s\nEdad: %d\nAcento: %s\n\nTu contrasena se guardara protegida con hash.",
+        "Crear cuenta", "Volver", PlayerName(playerid), ConvertGenderStr(playerid),
+        PI[playerid][jAge], Accents[PI[playerid][jAccent]]);
+    return 1;
 }
+
 Dialog:OnDialogConfirmDate(playerid, response, listitem, inputtext[])
 {
-	if (!response) return Dialog_ShowAccents(playerid);
-
-	CreateAccount(playerid);
-	return 1;
+    #pragma unused listitem, inputtext
+    if (!response) return Dialog_ShowAccents(playerid);
+    if (PI[playerid][jState] != ROLEPLAY_STATE_INREGISTER
+        || !pendingRegistrationPassword[playerid][0]) return 1;
+    CreateAccount(playerid);
+    return 1;
 }
+
 Dialog:OnDialogLogin(playerid, response, listitem, inputtext[])
 {
-	if (!response) return Kick(playerid);
+    #pragma unused listitem
+    if (!response) return Kick(playerid);
+    if (PI[playerid][jState] != ROLEPLAY_STATE_INLOGIN) return 1;
+    if (!strlen(inputtext) || strlen(inputtext) > PASS_LEN_MAX)
+    {
+        SendClientMessage(playerid, COLOR_ERROR, "Contrasena incorrecta.");
+        return ShowLoginDialog(playerid);
+    }
 
-	inline PassWord()
-	{
-		new DB_RESULT_ROWS;
-		cache_get_row_count(DB_RESULT_ROWS);
+    new query[128];
+    mysql_format(dbz, query, sizeof query,
+        "SELECT jPass,jPassSalt FROM players WHERE jName='%e' LIMIT 1", PlayerName(playerid));
+    mysql_tquery(dbz, query, "OnLoginPasswordChecked", "iis[65]",
+        playerid, playerSession[playerid], inputtext);
+    return 1;
+}
 
-		if (DB_RESULT_ROWS == 0)
-		{
-			return Dialog_Show(playerid, "OnDialogLogin", DIALOG_STYLE_PASSWORD, ""MAIN_COLOR"OcasoZone{f5f5f5} > Ingresa al servidor", "{f5f5f5}Bienvenido de nuevo a "MAIN_COLOR"OcasoZone{f5f5f5}!\n\nTu cuenta fue "MAIN_COLOR"encontrada {f5f5f5}\nIngresa tu "MAIN_COLOR"contrase�a para ingresar al servidor", "�Siguiente", "xSalir");
-		}
-		
-		JoinPlayer(playerid);
-	}
-	mysql_format(dbz, QUERY_BUFFER, sizeof QUERY_BUFFER, "SELECT * FROM players WHERE jName='%e' AND jPass='%e'", PlayerName(playerid), inputtext);
-	MySQL_TQueryInline(dbz, using inline PassWord, QUERY_BUFFER);
+forward OnLoginPasswordChecked(playerid, session, password[]);
+public OnLoginPasswordChecked(playerid, session, password[])
+{
+    if (!IsPlayerConnected(playerid) || playerSession[playerid] != session
+        || PI[playerid][jState] != ROLEPLAY_STATE_INLOGIN) return 1;
+    if (mysql_errno(dbz) != 0)
+    {
+        new error[128];
+        mysql_error(error, sizeof error, dbz);
+        printf("[Login] Error al verificar una cuenta: %s", error);
+        SendClientMessage(playerid, COLOR_ERROR, "No se pudo verificar la cuenta. Intenta nuevamente.");
+        return ShowLoginDialog(playerid);
+    }
 
-	return 1;
+    new rows, storedHash[PASS_HASH_SIZE], storedSalt[PASS_SALT_SIZE];
+    cache_get_row_count(rows);
+    if (rows < 1)
+    {
+        SendClientMessage(playerid, COLOR_ERROR, "La cuenta ya no existe. Vuelve a conectarte.");
+        return Kick(playerid);
+    }
+    cache_get_value_name(0, "jPass", storedHash, sizeof storedHash);
+    cache_get_value_name(0, "jPassSalt", storedSalt, sizeof storedSalt);
+
+    new bool:validPassword = false, bool:legacyPassword = false;
+    if (!storedSalt[0])
+    {
+        // Migracion transparente de cuentas antiguas que guardaban el texto plano.
+        validPassword = !strcmp(password, storedHash, false);
+        legacyPassword = validPassword;
+    }
+    else
+    {
+        new candidate[PASS_HASH_SIZE];
+        SHA256_PassHash(password, storedSalt, candidate, sizeof candidate);
+        validPassword = !strcmp(candidate, storedHash, false);
+    }
+
+    if (!validPassword)
+    {
+        loginAttempts[playerid]++;
+        if (loginAttempts[playerid] >= LOGIN_MAX_ATTEMPTS)
+        {
+            SendClientMessage(playerid, COLOR_ERROR, "Demasiados intentos fallidos. Vuelve a conectarte.");
+            return Kick(playerid);
+        }
+        SendClientMessage(playerid, COLOR_ERROR, "Contrasena incorrecta.");
+        return ShowLoginDialog(playerid);
+    }
+
+    if (legacyPassword)
+    {
+        GenerateAccountSalt(playerid, PI[playerid][jPassSalt], PASS_SALT_SIZE);
+        SHA256_PassHash(password, PI[playerid][jPassSalt], PI[playerid][jPass], PASS_HASH_SIZE);
+        new query[256];
+        mysql_format(dbz, query, sizeof query,
+            "UPDATE players SET jPass='%e',jPassSalt='%e' WHERE jName='%e' AND jPassSalt=''",
+            PI[playerid][jPass], PI[playerid][jPassSalt], PlayerName(playerid));
+        mysql_tquery(dbz, query, "OnLegacyPasswordUpgraded", "ii", playerid, session);
+    }
+    else
+    {
+        JoinPlayer(playerid);
+    }
+    return 1;
+}
+
+forward OnLegacyPasswordUpgraded(playerid, session);
+public OnLegacyPasswordUpgraded(playerid, session)
+{
+    if (mysql_errno(dbz) != 0)
+    {
+        new error[128];
+        mysql_error(error, sizeof error, dbz);
+        printf("[Login] No se pudo actualizar el hash heredado: %s", error);
+        if (IsPlayerConnected(playerid) && playerSession[playerid] == session)
+        {
+            SendClientMessage(playerid, COLOR_ERROR, "No se pudo proteger la contrasena antigua. Intenta conectarte de nuevo.");
+            Kick(playerid);
+        }
+        return 1;
+    }
+    if (!IsPlayerConnected(playerid) || playerSession[playerid] != session) return 1;
+    JoinPlayer(playerid);
+    return 1;
+}
+
+stock IsNumericString(const text[])
+{
+    if (!text[0]) return 0;
+    for (new index = 0; text[index] != '\0'; index++)
+    {
+        if (text[index] < '0' || text[index] > '9') return 0;
+    }
+    return 1;
 }
 
 /*FUNCS MYSQL*/
 forward CreateAccount(playerid);
 public CreateAccount(playerid)
 {
+	if (!IsPlayerConnected(playerid) || PI[playerid][jState] != ROLEPLAY_STATE_INREGISTER) return 0;
 	GetPlayerIp(playerid, PI[playerid][jIP_reg], 22);
+	GenerateAccountSalt(playerid, PI[playerid][jPassSalt], PASS_SALT_SIZE);
+	SHA256_PassHash(pendingRegistrationPassword[playerid], PI[playerid][jPassSalt],
+		PI[playerid][jPass], PASS_HASH_SIZE);
+	pendingRegistrationPassword[playerid][0] = '\0';
 
 	PI[playerid][jCash] = 5000;
 	PI[playerid][jBankMoney] = 1000;
@@ -435,16 +607,17 @@ public CreateAccount(playerid)
 	QUERY_BUFFER, 
 	sizeof QUERY_BUFFER, 
 	"INSERT INTO players\
-	(jname, jpass, jgmail, jip_reg, jdateregister, jlastconnexion, jcash,\
+	(jname, jpass, jPassSalt, jgmail, jip_reg, jdateregister, jlastconnexion, jcash,\
 	jbankmoney, jscore, jskin, jstate,\
 	jgender, jage, jaccent, jposx,\
 	jposy, jposz, jrot, jhealth, jarmour, jAdmin, jJob, jJobLevel, jJobXP,\
 	jFaction, jFactionRank, jHunger, jThirst) VALUES \
-	('%e', '%e', '%e', '%e', NOW(), NOW(), %i, %i, %i, %i, %i, %i, \
+	('%e', '%e', '%e', '%e', '%e', NOW(), NOW(), %i, %i, %i, %i, %i, %i, \
 	%i, %i, %f, %f, %f, %f, %f, %f, 0, 0, 1, 0, 0, 0, 100, 100)", 
 
 	PlayerName(playerid), 
 	PI[playerid][jPass], 
+	PI[playerid][jPassSalt],
 	PI[playerid][jGmail],
 	PI[playerid][jIP_reg],
 	PI[playerid][jCash],
@@ -462,8 +635,6 @@ public CreateAccount(playerid)
 	PI[playerid][jHealth],
 	PI[playerid][jArmour]);
 	mysql_tquery(dbz, QUERY_BUFFER, "OnAccountCreated", "ii", playerid, playerSession[playerid]);
-	printf("%s", QUERY_BUFFER);
-
 	return 1;
 }
 
@@ -487,7 +658,10 @@ public OnAccountCreated(playerid, session)
 	if (!IsPlayerConnected(playerid) || playerSession[playerid] != session) return 1;
 
 	PI[playerid][jID] = cache_insert_id();
+	PI[playerid][jPhone] = 0;
 	PI[playerid][jState] = ROLEPLAY_STATE_NORMAL;
+	loginAttempts[playerid] = 0;
+	EnsurePlayerPhoneNumber(playerid);
 	GivePlayerMoney(playerid, PI[playerid][jCash]);
 	OnGameplayPlayerLoaded(playerid);
 	SetupRentalCheckpoint(playerid);
@@ -507,13 +681,24 @@ public JoinPlayer(playerid)
 	inline OnLoadedPlayerData()
 	{
 		if (!IsPlayerConnected(playerid) || playerSession[playerid] != session) return 1;
+		if (mysql_errno(dbz) != 0)
+		{
+			SendClientMessage(playerid, COLOR_ERROR, "No se pudieron cargar tus datos. Intenta conectarte nuevamente.");
+			Kick(playerid);
+			return 1;
+		}
 
 		new rows;
-		if (cache_get_row_count(rows))
+		if (!cache_get_row_count(rows) || rows < 1)
 		{
-			if (rows)
-			{
-				cache_get_value_name(0, "jPass", PI[playerid][jPass], PASS_LEN_MAX);
+			SendClientMessage(playerid, COLOR_ERROR, "No se encontro tu cuenta al cargar los datos.");
+			Kick(playerid);
+			return 1;
+		}
+		if (rows)
+		{
+				cache_get_value_name(0, "jPass", PI[playerid][jPass], PASS_HASH_SIZE);
+				cache_get_value_name(0, "jPassSalt", PI[playerid][jPassSalt], PASS_SALT_SIZE);
 				cache_get_value_name(0, "jGmail", PI[playerid][jGmail], 48);
 				cache_get_value_name(0, "jIP_reg", PI[playerid][jIP_reg], 22);
 				cache_get_value_name(0, "jDateRegister", PI[playerid][jDateRegister], 25);
@@ -536,6 +721,7 @@ public JoinPlayer(playerid)
 				cache_get_value_name_int(0, "jGender", PI[playerid][jGender]);
 				cache_get_value_name_int(0, "jAge", PI[playerid][jAge]);
 				cache_get_value_name_int(0, "jAccent", PI[playerid][jAccent]);
+				cache_get_value_name_int(0, "jPhone", PI[playerid][jPhone]);
 				
 				cache_get_value_name_float(0, "jPosX", PI[playerid][jPosX]);
 				cache_get_value_name_float(0, "jPosY", PI[playerid][jPosY]);
@@ -558,6 +744,8 @@ public JoinPlayer(playerid)
 				SetPlayerArmour(playerid, PI[playerid][jArmour]);
 
 				PI[playerid][jState] = ROLEPLAY_STATE_NORMAL;
+				loginAttempts[playerid] = 0;
+				EnsurePlayerPhoneNumber(playerid);
 
 				TogglePlayerSpectating(playerid, false);
 				OnGameplayPlayerLoaded(playerid);
@@ -565,7 +753,6 @@ public JoinPlayer(playerid)
 				HideTextdraws(playerid);
 			}
 		}
-	}
 	mysql_format(dbz, QUERY_BUFFER, sizeof QUERY_BUFFER, "SELECT * FROM players WHERE jName = '%e'", PlayerName(playerid));
 	MySQL_TQueryInline(dbz, using inline OnLoadedPlayerData, QUERY_BUFFER);
 	return 1;
@@ -606,6 +793,7 @@ stock SavePlayerData(playerid, bool:sync)
 	"UPDATE players SET \
 			jname='%e',\
 			jpass='%e',\
+			jPassSalt='%e',\
 			jgmail='%e',\
 			jJob=%i,\
 			jJobLevel=%i,\
@@ -631,7 +819,7 @@ stock SavePlayerData(playerid, bool:sync)
 			jarmour=%f\
 			WHERE jname='%e'", 
 
-			PlayerName(playerid), PI[playerid][jPass],
+			PlayerName(playerid), PI[playerid][jPass], PI[playerid][jPassSalt],
 			PI[playerid][jGmail], PI[playerid][jJob], PI[playerid][jJobLevel],
 			PI[playerid][jJobXP], PI[playerid][jFaction], PI[playerid][jFactionRank],
 			PI[playerid][jHunger], PI[playerid][jThirst], PI[playerid][jCash], 

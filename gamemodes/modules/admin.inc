@@ -234,7 +234,7 @@ CMD:setfaccion(playerid, params[])
 	new targetid, faction, rank;
 	if (sscanf(params, "uii", targetid, faction, rank))
 	{
-		return SendClientMessage(playerid, COLOR_USAGE, "Uso: /setfaccion <jugador/id> <faccion 0-3> <rango 0-5>");
+		return SendClientMessage(playerid, COLOR_USAGE, "Uso: /setfaccion <jugador/id> <faccion 0-9> <rango 0-5>");
 	}
 	if (!IsPlayerConnected(targetid) || !IsAccountLoaded(targetid))
 	{
@@ -242,10 +242,10 @@ CMD:setfaccion(playerid, params[])
 	}
 	if (targetid == playerid) return SendClientMessage(playerid, COLOR_ERROR, "No puedes cambiar tu propia faccion.");
 	if (!CanAdminAffectTarget(playerid, targetid)) return 1;
-	if (faction < FACTION_NONE || faction > FACTION_MECHANIC
+	if (faction < FACTION_NONE || faction > FACTION_MAX
 		|| rank < 0 || rank > FACTION_MAX_RANK)
 	{
-		return SendClientMessage(playerid, COLOR_ERROR, "Faccion: 0-3; rango: 0-5.");
+		return SendClientMessage(playerid, COLOR_ERROR, "Faccion: 0-9; rango: 0-5.");
 	}
 	if ((faction == FACTION_NONE && rank != 0) || (faction != FACTION_NONE && rank == 0))
 	{

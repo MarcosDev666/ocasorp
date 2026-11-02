@@ -16,11 +16,11 @@
 #include <a_mysql>
 #include <YSI_Coding\y_stringhash>
 #include <YSI_Coding\y_va>
-#include <YSI_Coding\y_hooks>
 #include <YSI_Coding\y_inline>
 #include <YSI_Extra\y_inline_mysql>
 #include <easyDialog>
 #include <Pawn.CMD>
+#include <YSI_Coding\y_hooks>
 
 // Colores principales
 #define COLOR_GLOBAL 0xEEEEEEFF
@@ -82,11 +82,14 @@ new Accents[][] =
 
 /*pinfo*/
 
-#define PASS_LEN_MAX 18
-#define PASS_LEN_MIN 6
+#define PASS_LEN_MAX 64
+#define PASS_LEN_MIN 8
+#define PASS_HASH_SIZE 65
+#define PASS_SALT_SIZE 65
 enum enum_PI
 {
-    jPass[PASS_LEN_MAX],
+    jPass[PASS_HASH_SIZE],
+    jPassSalt[PASS_SALT_SIZE],
     jGmail[48],
     jIP_reg[22], //ip de registro
     jDateRegister[25], //Fecha de registro
@@ -109,6 +112,7 @@ enum enum_PI
     jGender,
     jAge,
     jAccent,
+    jPhone,
 
     Float:jPosX,
     Float:jPosY,
@@ -121,12 +125,6 @@ enum enum_PI
 
 }
 new PI[MAX_PLAYERS][enum_PI];
-
-enum enum_PT
-{
-    pt_IP_CONN[22]
-}
-new PT[MAX_PLAYERS][enum_PT];
 
 main(){}
 
@@ -176,7 +174,7 @@ PlayerName(playerid)
 }
 ClearPlayerChat(playerid)
 {
-    for (new i =0; i < 200; i++)
+    for (new i = 0; i < 20; i++)
     {
         SendClientMessage(playerid, -1, "");
     }
@@ -211,23 +209,36 @@ ConvertGenderStr(playerid)
     }
     return gender;
 }
-SendLocalMessage(playerid, const lmessage[])
-{
-    new Float:targX, Float:targY, Float: targZ;
-    GetPlayerPos(playerid, targX, targY, targZ);
+forward bool:SendPhoneCallText(playerid, const text[]);
 
-    for (new i = 0; i < MAX_PLAYERS; i++)
+stock SendLocalMessageRadiusColor(playerid, Float:radius, color, const lmessage[])
+{
+    if (!IsPlayerConnected(playerid) || !IsAccountLoaded(playerid)) return 0;
+
+    new Float:sourceX, Float:sourceY, Float:sourceZ;
+    GetPlayerPos(playerid, sourceX, sourceY, sourceZ);
+    new sourceInterior = GetPlayerInterior(playerid);
+    new sourceWorld = GetPlayerVirtualWorld(playerid);
+
+    for (new targetid = 0; targetid < MAX_PLAYERS; targetid++)
     {
-        if (IsPlayerInRangeOfPoint(i, MIN_DISTANCE_INTERACTION, 
-        targX, targY, targZ))
-        {
-            if (PI[playerid][jState] != ROLEPLAY_STATE_INLOGIN && PI[playerid][jState] != ROLEPLAY_STATE_INREGISTER)
-            {
-                SendClientMessage(playerid, -1, lmessage);
-            }
-        }
+        if (!IsPlayerConnected(targetid) || !IsAccountLoaded(targetid)) continue;
+        if (GetPlayerInterior(targetid) != sourceInterior
+            || GetPlayerVirtualWorld(targetid) != sourceWorld) continue;
+        if (!IsPlayerInRangeOfPoint(targetid, radius, sourceX, sourceY, sourceZ)) continue;
+        SendClientMessage(targetid, color, lmessage);
     }
     return 1;
+}
+
+stock SendLocalMessageRadius(playerid, Float:radius, const lmessage[])
+{
+    return SendLocalMessageRadiusColor(playerid, radius, COLOR_GLOBAL, lmessage);
+}
+
+SendLocalMessage(playerid, const lmessage[])
+{
+    return SendLocalMessageRadius(playerid, MIN_DISTANCE_INTERACTION, lmessage);
 }
 stock SendMsg(playerid, color, const text[], {Float, _}:...)
 {
@@ -246,7 +257,7 @@ new MySQL:dbz;
 /*......*/
 public OnGameModeInit()
 {
-    ConnectDatabase();
+    if (!ConnectDatabase()) return 0;
 	InitializeGameplaySystems();
 	InitializeStores();
 	InitializePropertySystems();
@@ -261,7 +272,7 @@ public OnGameModeInit()
 public OnPlayerDisconnect(playerid, reason)
 {
     PreparePropertiesDisconnect(playerid);
-    if (PI[playerid][jState] != ROLEPLAY_STATE_INLOGIN)
+    if (PI[playerid][jID] > 0 && IsAccountLoaded(playerid))
     {
         SaveData(playerid);
     }
@@ -274,7 +285,7 @@ public OnGameModeExit()
 {
     for (new i = 0; i < MAX_PLAYERS; i++)
     {
-        if (IsPlayerConnected(i) && PI[i][jState] != ROLEPLAY_STATE_INLOGIN)
+        if (IsPlayerConnected(i) && PI[i][jID] > 0 && IsAccountLoaded(i))
         {
             SaveDataSync(i);
         }
@@ -285,8 +296,12 @@ public OnGameModeExit()
 }
 public OnPlayerText(playerid, text[])
 {
-    new msg[1500];
-    format(msg, sizeof msg, "%s (%s) dice: %s", PlayerName(playerid), Accents[PI[playerid][jAccent]], text);
+    if (!IsAccountLoaded(playerid)) return 0;
+    if (SendPhoneCallText(playerid, text)) return 0;
+    new accent = PI[playerid][jAccent];
+    if (accent < 0 || accent >= sizeof Accents) accent = 0;
+    new msg[256];
+    format(msg, sizeof msg, "%s (%s) dice: %s", PlayerName(playerid), Accents[accent], text);
     SendLocalMessage(playerid, msg);
     return 0;
 }
@@ -319,10 +334,12 @@ forward StoreAllVehiclesOnShutdown();
 forward RefreshPlayerCash(playerid, session);
 forward HandleHousePickup(playerid, pickupid);
 forward bool:IsWalletTransactionPending(playerid);
+forward EnsurePlayerPhoneNumber(playerid);
 
 /*modulos */   
 #include "modules/login"
 #include "modules/gameplay"
+#include "modules/phone"
 #include "modules/inventory"
 #include "modules/hud"
 #include "modules/admin"
@@ -331,3 +348,4 @@ forward bool:IsWalletTransactionPending(playerid);
 #include "modules/properties"
 #include "modules/gps"
 #include "modules/cmds"
+#include "modules/ui"

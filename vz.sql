@@ -30,7 +30,8 @@ SET time_zone = "+00:00";
 CREATE TABLE `players` (
   `id` int(10) UNSIGNED NOT NULL,
   `jName` varchar(24) NOT NULL,
-  `jPass` varchar(18) NOT NULL,
+  `jPass` varchar(128) NOT NULL,
+  `jPassSalt` varchar(64) NOT NULL DEFAULT '',
   `jGmail` varchar(48) NOT NULL,
   `jIP_reg` varchar(22) NOT NULL,
   `jDateRegister` datetime NOT NULL,
@@ -51,6 +52,7 @@ CREATE TABLE `players` (
   `jGender` int(11) NOT NULL,
   `jAge` int(11) NOT NULL,
   `jAccent` int(11) NOT NULL,
+  `jPhone` int(10) UNSIGNED NOT NULL DEFAULT 0,
   `jPosX` float DEFAULT 0,
   `jPosY` float DEFAULT 0,
   `jPosZ` float DEFAULT 0,
@@ -59,12 +61,7 @@ CREATE TABLE `players` (
   `jArmour` float DEFAULT 0
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
---
--- Volcado de datos para la tabla `players`
---
-
-INSERT INTO `players` (`id`, `jName`, `jPass`, `jGmail`, `jIP_reg`, `jDateRegister`, `jLastConnexion`, `jCash`, `jBankMoney`, `jScore`, `jSkin`, `jState`, `jGender`, `jAge`, `jAccent`, `jPosX`, `jPosY`, `jPosZ`, `jRot`, `jHealth`, `jArmour`) VALUES
-(4, 'Ocaso_Pa', 'Ocaso6218', '', '127.0.0.1', '0000-00-00 00:00:00', '0000-00-00 00:00:00', 5000, 1000, 0, 250, 0, 1, 30, 0, 1831.38, -1823.58, 15.4279, 245.88, 100, 0);
+-- El dump inicia sin cuentas de usuario predeterminadas.
 
 --
 -- Índices para tablas volcadas
@@ -84,7 +81,20 @@ ALTER TABLE `players`
 -- AUTO_INCREMENT de la tabla `players`
 --
 ALTER TABLE `players`
-  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
+  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=1;
+
+CREATE TABLE `phone_messages` (
+  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `sender_id` int(10) unsigned NOT NULL,
+  `receiver_id` int(10) unsigned NOT NULL,
+  `body` varchar(160) NOT NULL,
+  `sent_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_phone_messages_receiver` (`receiver_id`,`id`),
+  KEY `idx_phone_messages_sender` (`sender_id`),
+  CONSTRAINT `fk_phone_messages_sender` FOREIGN KEY (`sender_id`) REFERENCES `players` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_phone_messages_receiver` FOREIGN KEY (`receiver_id`) REFERENCES `players` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 CREATE TABLE `player_inventory` (
   `player_id` int(10) UNSIGNED NOT NULL,

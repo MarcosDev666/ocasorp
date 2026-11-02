@@ -1,3 +1,5 @@
+#include <YSI_Coding\y_hooks>
+
 #define RENTAL_X 1698.0
 #define RENTAL_Y -1876.0
 #define RENTAL_Z 13.5

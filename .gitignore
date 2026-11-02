@@ -1,0 +1,3 @@
+# Local database credentials; copy mysql.ini.example to mysql.ini.
+/mysql.ini
+/scriptfiles/mysql.ini

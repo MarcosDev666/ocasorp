@@ -2,7 +2,8 @@
 
 CMD:duda(playerid, params[])
 {
-    // Cooldown de 10 minutos
+    if (!IsAccountLoaded(playerid)) return SendClientMessage(playerid, COLOR_ERROR, "Primero debes iniciar sesion.");
+    // Limite de una duda cada 30 segundos.
     if (!CanUseCooldown(playerid, 30)) return 1;
 
 	if(!strlen(params)) {
@@ -23,7 +24,8 @@ CMD:duda(playerid, params[])
 
 CMD:twitter(playerid, params[])
 {
-	// Cooldown de 5 minutos 
+	if (!IsAccountLoaded(playerid)) return SendClientMessage(playerid, COLOR_ERROR, "Primero debes iniciar sesion.");
+	// Limite de un tweet cada 10 segundos.
 	if (!CanUseCooldown(playerid, 10)) return 1;
 
 	if(!strlen(params)) {
@@ -45,6 +47,7 @@ CMD:twitter(playerid, params[])
 // Comando /me - acci?n (roleplay)
 CMD:me(playerid, params[])
 {
+	if (!IsAccountLoaded(playerid)) return SendClientMessage(playerid, COLOR_ERROR, "Primero debes iniciar sesion.");
 	if(!strlen(params)) {
 		new usage[64];
 		format(usage, sizeof usage, "Uso: /me <acci?n>");
@@ -63,6 +66,7 @@ CMD:me(playerid, params[])
 // Comando /do - descripci?n (roleplay)
 CMD:do(playerid, params[])
 {
+	if (!IsAccountLoaded(playerid)) return SendClientMessage(playerid, COLOR_ERROR, "Primero debes iniciar sesion.");
 	if(!strlen(params)) {
 		new usage[64];
 		format(usage, sizeof usage, "Uso: /do <descripci?n>");
@@ -79,6 +83,7 @@ CMD:do(playerid, params[])
 // Comando /gritar - hablar en volumen alto
 CMD:gritar(playerid, params[])
 {
+	if (!IsAccountLoaded(playerid)) return SendClientMessage(playerid, COLOR_ERROR, "Primero debes iniciar sesion.");
 	if(!strlen(params)) {
 		new usage[64];
 		format(usage, sizeof usage, "Uso: /gritar <mensaje>");
@@ -89,14 +94,15 @@ CMD:gritar(playerid, params[])
 	new name[MAX_PLAYER_NAME+1];
 	GetPlayerName(playerid, name, sizeof name);
 	new msg[256+1];
-	format(msg, sizeof msg, "%s GRITA: %s", name, params);
-	SendClientMessageToAll(0xFF6347FF, msg); // Rojo-naranja
+	format(msg, sizeof msg, "%s grita: %s", name, params);
+	SendLocalMessageRadiusColor(playerid, 20.0, 0xFF6347FF, msg);
 	return 1;
 }
 
 // Comando /susurrar - hablar en volumen bajo
 CMD:susurrar(playerid, params[])
 {
+	if (!IsAccountLoaded(playerid)) return SendClientMessage(playerid, COLOR_ERROR, "Primero debes iniciar sesion.");
 	if(!strlen(params)) {
 		new usage[64];
 		format(usage, sizeof usage, "Uso: /susurrar <mensaje>");
@@ -115,6 +121,8 @@ CMD:susurrar(playerid, params[])
 // Comando /llorar - expresi?n emocional
 CMD:llorar(playerid, params[])
 {
+	#pragma unused params
+	if (!IsAccountLoaded(playerid)) return SendClientMessage(playerid, COLOR_ERROR, "Primero debes iniciar sesion.");
 	new name[MAX_PLAYER_NAME+1];
 	GetPlayerName(playerid, name, sizeof name);
 	new msg[128];
@@ -126,6 +134,8 @@ CMD:llorar(playerid, params[])
 // Comando /reir - expresi?n emocional
 CMD:reir(playerid, params[])
 {
+	#pragma unused params
+	if (!IsAccountLoaded(playerid)) return SendClientMessage(playerid, COLOR_ERROR, "Primero debes iniciar sesion.");
 	new name[MAX_PLAYER_NAME+1];
 	GetPlayerName(playerid, name, sizeof name);
 	new msg[128];
@@ -152,17 +162,19 @@ CMD:ayuda(playerid, params[])
 	SendClientMessage(playerid, COLOR_GLOBAL, "/quitarGPS /borrarblip - Cancelar la ruta GPS");
 	SendClientMessage(playerid, COLOR_GLOBAL, "/tienda - Abrir una tienda 24/7 cercana");
 	SendClientMessage(playerid, COLOR_GLOBAL, "/banco /depositar /retirar /transferir - Gestion bancaria");
+	SendClientMessage(playerid, COLOR_GLOBAL, "/telefono /llamar /contestar /colgar /sms /mensajes - Telefono y buzon");
 	SendClientMessage(playerid, COLOR_GLOBAL, "/concesionario /misvehiculos /guardarveh - Vehiculos y garage");
 	SendClientMessage(playerid, COLOR_GLOBAL, "/casas /comprarcasa /micasa /vendercasa /entrar /salir - Propiedades");
 	SendClientMessage(playerid, COLOR_GLOBAL, "/admins - Ver administradores conectados");
 	SendClientMessage(playerid, COLOR_GLOBAL, "/ayudaadmin - Comandos segun tu nivel de administrador");
 	SendClientMessage(playerid, COLOR_GLOBAL, "/ayudagame - Ayuda de trabajos, facciones e inventario");
-	SendClientMessage(playerid, COLOR_GLOBAL, "/empleos /turno /miempleo - Sistema de trabajos");
+	SendClientMessage(playerid, COLOR_GLOBAL, "/empleos /turno /miempleo - 20 trabajos con progresion y rutas");
 	SendClientMessage(playerid, COLOR_GLOBAL, "/faccion /facciones /f <mensaje> - Sistema de facciones");
 	SendClientMessage(playerid, COLOR_GLOBAL, "/miembrosfaccion /promover /degradar /uniforme - Gestion de faccion");
 	SendClientMessage(playerid, COLOR_GLOBAL, "/curarfac (EMS) /reparar (mecanico) /multar (policia)");
 	SendClientMessage(playerid, COLOR_GLOBAL, "/inventario /usar <slot> /comprar <articulo> <cantidad> (en tiendas 24/7)");
 	SendClientMessage(playerid, COLOR_GLOBAL, "/dinero - Ver tu dinero");
+	SendClientMessage(playerid, COLOR_GLOBAL, "/hud - Mostrar u ocultar el HUD de informacion");
 	SendClientMessage(playerid, COLOR_GLOBAL, "/ping - Ver tu ping");
 	return 1;
 }
@@ -180,6 +192,8 @@ CMD:ping(playerid, params[])
 // Comando /dinero - ver dinero del jugador
 CMD:dinero(playerid, params[])
 {
+	#pragma unused params
+	if (!IsAccountLoaded(playerid)) return SendClientMessage(playerid, COLOR_ERROR, "Primero debes iniciar sesion.");
 	new cash = GetPlayerMoney(playerid);
 	new msg[64];
 	format(msg, sizeof msg, "Dinero: $%i", cash);
